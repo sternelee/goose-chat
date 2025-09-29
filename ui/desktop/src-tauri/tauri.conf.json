@@ -5,9 +5,9 @@
   "identifier": "com.goose.io",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "bun run build",
-    "frontendDist": "../goose-cli/static"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

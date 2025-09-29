@@ -8,10 +8,12 @@ export default defineConfig({
   base: './',
   build: {
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'src/main.ts'),
-        index: resolve(__dirname, 'index.html'),
-      },
+      input: resolve(__dirname, 'index.html'),
     },
+    outDir: 'dist',
+  },
+  server: {
+    port: 5173,
+    host: true,
   },
 });

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { IpcRendererEvent } from 'electron';
 import {
   HashRouter,
   Routes,
