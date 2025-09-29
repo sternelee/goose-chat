@@ -4,7 +4,7 @@ use super::{
     anthropic::AnthropicProvider,
     azure::AzureProvider,
     base::{Provider, ProviderMetadata},
-    bedrock::BedrockProvider,
+    // bedrock::BedrockProvider,
     claude_code::ClaudeCodeProvider,
     cursor_agent::CursorAgentProvider,
     databricks::DatabricksProvider,
@@ -19,7 +19,7 @@ use super::{
     openai::OpenAiProvider,
     openrouter::OpenRouterProvider,
     provider_registry::ProviderRegistry,
-    sagemaker_tgi::SageMakerTgiProvider,
+    // sagemaker_tgi::SageMakerTgiProvider,
     snowflake::SnowflakeProvider,
     tetrate::TetrateProvider,
     venice::VeniceProvider,
@@ -38,7 +38,7 @@ static REGISTRY: Lazy<RwLock<ProviderRegistry>> = Lazy::new(|| {
     let registry = ProviderRegistry::new().with_providers(|registry| {
         registry.register::<AnthropicProvider, _>(AnthropicProvider::from_env);
         registry.register::<AzureProvider, _>(AzureProvider::from_env);
-        registry.register::<BedrockProvider, _>(BedrockProvider::from_env);
+        // registry.register::<BedrockProvider, _>(BedrockProvider::from_env);
         registry.register::<ClaudeCodeProvider, _>(ClaudeCodeProvider::from_env);
         registry.register::<CursorAgentProvider, _>(CursorAgentProvider::from_env);
         registry.register::<DatabricksProvider, _>(DatabricksProvider::from_env);
@@ -51,7 +51,7 @@ static REGISTRY: Lazy<RwLock<ProviderRegistry>> = Lazy::new(|| {
         registry.register::<OllamaProvider, _>(OllamaProvider::from_env);
         registry.register::<OpenAiProvider, _>(OpenAiProvider::from_env);
         registry.register::<OpenRouterProvider, _>(OpenRouterProvider::from_env);
-        registry.register::<SageMakerTgiProvider, _>(SageMakerTgiProvider::from_env);
+        // registry.register::<SageMakerTgiProvider, _>(SageMakerTgiProvider::from_env);
         registry.register::<SnowflakeProvider, _>(SnowflakeProvider::from_env);
         registry.register::<TetrateProvider, _>(TetrateProvider::from_env);
         registry.register::<VeniceProvider, _>(VeniceProvider::from_env);
