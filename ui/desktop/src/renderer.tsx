@@ -12,8 +12,8 @@ const App = lazy(() => import('./App'));
   console.log('web app initialized, connecting to backend');
 
   // For web deployment, connect to a configurable backend URL
-  const baseUrl = process.env.GOOSE_API_URL || import.meta.env.VITE_GOOSE_API_URL || 'http://localhost:5000';
-  const secretKey = process.env.GOOSE_SECRET_KEY || import.meta.env.VITE_GOOSE_SECRET_KEY || 'default-secret-key';
+  const baseUrl = import.meta.env.VITE_GOOSE_API_URL || '/api';
+  const secretKey = import.meta.env.VITE_GOOSE_SECRET_KEY || 'default-secret-key';
 
   console.log('connecting to backend at', baseUrl);
   client.setConfig({

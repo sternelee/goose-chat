@@ -72,31 +72,33 @@ interface ElectronAPI {
 
   // App lifecycle
   reactReady: () => void;
+
+  // Event handling
+  on: (channel: string, callback: (...args: any[]) => void) => void;
+  off: (channel: string, callback: (...args: any[]) => void) => void;
+  emit: (channel: string, ...args: any[]) => void;
 }
 
 // Create mock implementation
 const webElectronAPI: ElectronAPI = {
   getGoosedHostPort: async () => {
-    return (
-      process.env.GOOSE_API_URL || import.meta.env.VITE_GOOSE_API_URL || 'http://localhost:5000'
-    );
+    return import.meta.env.VITE_GOOSE_API_URL || '/api';
   },
 
   getSecretKey: async () => {
-    return (
-      process.env.GOOSE_SECRET_KEY || import.meta.env.VITE_GOOSE_SECRET_KEY || 'default-secret-key'
-    );
+    return import.meta.env.VITE_GOOSE_SECRET_KEY || 'default-secret-key';
   },
 
   getConfig: () => {
     return {
-      GOOSE_DEFAULT_PROVIDER: process.env.GOOSE_DEFAULT_PROVIDER || 'openai',
-      GOOSE_DEFAULT_MODEL: process.env.GOOSE_DEFAULT_MODEL || 'gpt-3.5-turbo',
+      GOOSE_DEFAULT_PROVIDER: import.meta.env.VITE_GOOSE_DEFAULT_PROVIDER || 'openai',
+      GOOSE_DEFAULT_MODEL: import.meta.env.VITE_GOOSE_DEFAULT_MODEL || 'gpt-3.5-turbo',
       GOOSE_API_HOST: 'http://127.0.0.1',
-      GOOSE_PORT: process.env.GOOSE_PORT || 5000,
+      GOOSE_PORT: import.meta.env.VITE_GOOSE_PORT || 5000,
       GOOSE_WORKING_DIR: '',
-      GOOSE_BASE_URL_SHARE: process.env.GOOSE_BASE_URL_SHARE,
-      GOOSE_VERSION: process.env.GOOSE_VERSION || '1.0.0',
+      GOOSE_BASE_URL_SHARE: import.meta.env.VITE_GOOSE_BASE_URL_SHARE,
+      GOOSE_VERSION: import.meta.env.VITE_GOOSE_VERSION || '1.0.0',
+      GOOSE_ALLOWLIST_WARNING: import.meta.env.VITE_GOOSE_ALLOWLIST_WARNING === 'true',
     };
   },
 
@@ -288,17 +290,86 @@ const webElectronAPI: ElectronAPI = {
   reactReady: () => {
     console.log('reactReady called');
   },
+
+  // Event handling implementation - delegates to eventBus
+  on: (channel: string, callback: (...args: any[]) => void) => {
+    // Import dynamically to avoid circular dependencies
+    import('./utils/eventBus').then(({ eventBus }) => {
+      eventBus.on(channel, callback);
+    });
+    console.log(`Event listener registered for channel: ${channel}`);
+  },
+
+  off: (channel: string, callback: (...args: any[]) => void) => {
+    // Import dynamically to avoid circular dependencies
+    import('./utils/eventBus').then(({ eventBus }) => {
+      eventBus.off(channel, callback);
+    });
+    console.log(`Event listener removed for channel: ${channel}`);
+  },
+
+  emit: (channel: string, ...args: any[]) => {
+    // Import dynamically to avoid circular dependencies
+    import('./utils/eventBus').then(({ eventBus }) => {
+      eventBus.emit(channel, ...args);
+    });
+    console.log(`Emitting event on channel: ${channel}`, args);
+  },
 };
+
+// Event handlers storage
+const eventHandlers = new Map<string, Set<(...args: any[]) => void>>();
+
+// Helper function to simulate extension installation requests
+export function simulateExtensionRequest(link: string) {
+  console.log(`Simulating extension request: ${link}`);
+  webElectronAPI.emit('add-extension', link);
+}
 
 // Make the API available globally
 declare global {
   interface Window {
     electron: ElectronAPI;
+    appConfig: {
+      get: (key: string) => unknown;
+      getAll: () => Record<string, unknown>;
+    };
   }
 }
 
+// Create appConfig API that mimics the Electron version
+const appConfigAPI = {
+  get: (key: string) => {
+    const config = {
+      GOOSE_API_HOST: import.meta.env.VITE_GOOSE_API_HOST || 'http://127.0.0.1',
+      GOOSE_PORT: import.meta.env.VITE_GOOSE_PORT || 5000,
+      GOOSE_WORKING_DIR: import.meta.env.VITE_GOOSE_WORKING_DIR || '',
+      GOOSE_BASE_URL_SHARE: import.meta.env.VITE_GOOSE_BASE_URL_SHARE,
+      GOOSE_VERSION: import.meta.env.VITE_GOOSE_VERSION || '1.0.0',
+      GOOSE_DEFAULT_PROVIDER: import.meta.env.VITE_GOOSE_DEFAULT_PROVIDER || 'openai',
+      GOOSE_DEFAULT_MODEL: import.meta.env.VITE_GOOSE_DEFAULT_MODEL || 'gpt-3.5-turbo',
+      GOOSE_PREDEFINED_MODELS: import.meta.env.VITE_GOOSE_PREDEFINED_MODELS,
+      recipe: null,
+    };
+    return config[key];
+  },
+  getAll: () => {
+    return {
+      GOOSE_API_HOST: import.meta.env.VITE_GOOSE_API_HOST || 'http://127.0.0.1',
+      GOOSE_PORT: import.meta.env.VITE_GOOSE_PORT || 5000,
+      GOOSE_WORKING_DIR: import.meta.env.VITE_GOOSE_WORKING_DIR || '',
+      GOOSE_BASE_URL_SHARE: import.meta.env.VITE_GOOSE_BASE_URL_SHARE,
+      GOOSE_VERSION: import.meta.env.VITE_GOOSE_VERSION || '1.0.0',
+      GOOSE_DEFAULT_PROVIDER: import.meta.env.VITE_GOOSE_DEFAULT_PROVIDER || 'openai',
+      GOOSE_DEFAULT_MODEL: import.meta.env.VITE_GOOSE_DEFAULT_MODEL || 'gpt-3.5-turbo',
+      GOOSE_PREDEFINED_MODELS: import.meta.env.VITE_GOOSE_PREDEFINED_MODELS,
+      recipe: null,
+    };
+  },
+};
+
 // Attach to window
 window.electron = webElectronAPI;
+window.appConfig = appConfigAPI;
 
 export default webElectronAPI;
-
