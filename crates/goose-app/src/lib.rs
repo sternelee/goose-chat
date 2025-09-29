@@ -1,8 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-//
 
-use axum::routing::get;
 use axum::Router;
+use goose_server::state::AppState as ServerAppState;
 use std::sync::Arc;
 use tauri::{Builder, State};
 use tauri_axum_htmx::{LocalRequest, LocalResponse};
@@ -10,6 +9,8 @@ use tokio::sync::Mutex;
 
 struct AppState {
     router: Arc<Mutex<Router>>,
+    #[allow(dead_code)]
+    server_state: Arc<ServerAppState>,
 }
 
 #[tauri::command]
@@ -25,11 +26,19 @@ async fn local_app_request(
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
+pub async fn run() {
+    let server_state = ServerAppState::new()
+        .await
+        .expect("Failed to create server state");
+
+    let app_router = Router::new().nest(
+        "/api",
+        goose_server::routes::configure(server_state.clone()),
+    );
 
     let app_state = AppState {
-        router: Arc::new(Mutex::new(app)),
+        router: Arc::new(Mutex::new(app_router)),
+        server_state,
     };
 
     Builder::default()
