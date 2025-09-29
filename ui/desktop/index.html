@@ -8,6 +8,68 @@
     />
     <title>Goose</title>
     <script>
+      const { invoke } = window.__TAURI__.core;
+
+      let localAppRequestCommand = 'local_app_request';
+
+      initialize('/api');
+      function initialize(initialPath, localAppRequestCommandOverride) {
+        if (localAppRequestCommandOverride) {
+          localAppRequestCommand = localAppRequestCommandOverride;
+        }
+
+        proxyFetch();
+        window.addEventListener('DOMContentLoaded', async () => {
+          const response = await window.fetch(initialPath);
+          document.documentElement.innerHTML = await response.text();
+        });
+      }
+
+      function proxyFetch() {
+        const originalFetch = window.fetch;
+
+        window.fetch = async function (...args) {
+          let [request] = args;
+          console.log('url:', request);
+          if (request === '/api') return;
+          const { url, ...options } = request;
+          if (url.startsWith('ipc://')) {
+            return originalFetch(...args);
+          }
+
+          request = {
+            uri: url,
+            method: options?.method || 'GET',
+            headers: options?.headers || {},
+            ...(options?.body && { body: options.body }),
+          };
+          let response = await invoke(localAppRequestCommand, {
+            localRequest: request,
+          });
+
+          while ([301, 302, 303, 307, 308].includes(parseInt(response.status_code))) {
+            const location = response.headers['location'];
+
+            const redirectRequest = {
+              uri: location,
+              method: 'GET',
+              headers: {},
+            };
+            response = await invoke('local_app_request', {
+              localRequest: redirectRequest,
+            });
+          }
+
+          const bodyByteArray = new Uint8Array(response.body);
+          const decoder = new TextDecoder('utf-8');
+          const bodyText = decoder.decode(bodyByteArray);
+
+          const status = parseInt(response.status_code);
+          const headers = new Headers(response.headers);
+          return new Response(bodyText, { status, headers });
+        };
+      }
+
       // Initialize theme before any content loads
       (function () {
         function initializeTheme() {
@@ -63,4 +125,3 @@
     <script type="module" src="./src/renderer.tsx"></script>
   </body>
 </html>
-

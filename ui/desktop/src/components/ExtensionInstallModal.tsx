@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from 'react';
-import { IpcRendererEvent } from 'electron';
 import {
   Dialog,
   DialogContent,
@@ -236,15 +235,15 @@ export function ExtensionInstallModal({ addExtension, setView }: ExtensionInstal
   useEffect(() => {
     console.log('Setting up extension install modal handler');
 
-    const handleAddExtension = async (_event: IpcRendererEvent, ...args: unknown[]) => {
+    const handleAddExtension = async (...args: unknown[]) => {
       const link = args[0] as string;
       await handleExtensionRequest(link);
     };
 
-    window.electron.on('add-extension', handleAddExtension);
+    eventBus.on('add-extension', handleAddExtension);
 
     return () => {
-      window.electron.off('add-extension', handleAddExtension);
+      eventBus.off('add-extension', handleAddExtension);
     };
   }, [handleExtensionRequest]);
 
