@@ -4,22 +4,23 @@ import { ConfigProvider } from './components/ConfigContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import SuspenseLoader from './suspense-loader';
 import { client } from './api/client.gen';
+import './electron-web-mock'; // Initialize web-compatible electron API
 
 const App = lazy(() => import('./App'));
 
 (async () => {
-  console.log('window created, getting goosed connection info');
-  const baseUrl = await window.electron.getGoosedHostPort();
-  if (baseUrl === null) {
-    window.alert('failed to start goose backend process');
-    return;
-  }
-  console.log('connecting at', baseUrl);
+  console.log('web app initialized, connecting to backend');
+
+  // For web deployment, connect to a configurable backend URL
+  const baseUrl = process.env.GOOSE_API_URL || import.meta.env.VITE_GOOSE_API_URL || 'http://localhost:5000';
+  const secretKey = process.env.GOOSE_SECRET_KEY || import.meta.env.VITE_GOOSE_SECRET_KEY || 'default-secret-key';
+
+  console.log('connecting to backend at', baseUrl);
   client.setConfig({
     baseUrl,
     headers: {
       'Content-Type': 'application/json',
-      'X-Secret-Key': await window.electron.getSecretKey(),
+      'X-Secret-Key': secretKey,
     },
   });
 
