@@ -3169,14 +3169,36 @@ dependencies = [
 name = "goose-app"
 version = "1.9.0"
 dependencies = [
+ "anyhow",
  "axum 0.8.5",
+ "base64 0.21.7",
+ "bytes",
+ "chrono",
+ "config",
+ "etcetera",
+ "futures",
+ "goose",
+ "goose-mcp",
+ "goose-server",
+ "http 1.2.0",
+ "mcp-core",
+ "reqwest 0.12.12",
+ "rmcp",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tauri",
  "tauri-axum-htmx",
  "tauri-build",
+ "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
+ "tower-http",
  "tower-service",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
