@@ -31,7 +31,7 @@ tauri-axum-htmx = { git = "https://github.com/sternelee/tauri-axum" }
 goose-server = { path = "../../../crates/goose-server" }
 goose = { path = "../../../crates/goose" }
 mcp-core = { path = "../../../crates/mcp-core" }
-goose-mcp = { path = "../../../crates/goose-mcp" }
+# goose-mcp = { path = "../../../crates/goose-mcp" }
 rmcp = { workspace = true }
 futures = "0.3"
 tracing = "0.1"

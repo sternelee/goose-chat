@@ -3178,7 +3178,6 @@ dependencies = [
  "etcetera",
  "futures",
  "goose",
- "goose-mcp",
  "goose-server",
  "http 1.2.0",
  "mcp-core",
