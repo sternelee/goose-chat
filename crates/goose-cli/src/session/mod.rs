@@ -207,7 +207,7 @@ impl CliSession {
             args: parts.iter().map(|s| s.to_string()).collect(),
             envs: Envs::new(envs),
             env_keys: Vec::new(),
-            description: Some(goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string()),
+            description: goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string(),
             // TODO: should set timeout
             timeout: Some(goose::config::DEFAULT_EXTENSION_TIMEOUT),
             bundled: None,
@@ -241,7 +241,7 @@ impl CliSession {
             uri: extension_url,
             envs: Envs::new(HashMap::new()),
             env_keys: Vec::new(),
-            description: Some(goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string()),
+            description: goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string(),
             // TODO: should set timeout
             timeout: Some(goose::config::DEFAULT_EXTENSION_TIMEOUT),
             bundled: None,
@@ -276,7 +276,7 @@ impl CliSession {
             envs: Envs::new(HashMap::new()),
             env_keys: Vec::new(),
             headers: HashMap::new(),
-            description: Some(goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string()),
+            description: goose::config::DEFAULT_EXTENSION_DESCRIPTION.to_string(),
             // TODO: should set timeout
             timeout: Some(goose::config::DEFAULT_EXTENSION_TIMEOUT),
             bundled: None,
@@ -306,7 +306,7 @@ impl CliSession {
                 // TODO: should set a timeout
                 timeout: Some(goose::config::DEFAULT_EXTENSION_TIMEOUT),
                 bundled: None,
-                description: None,
+                description: name.trim().to_string(),
                 available_tools: Vec::new(),
             };
             self.agent
@@ -758,6 +758,11 @@ impl CliSession {
                 }
             }
         }
+
+        if let Some(id) = &self.session_id {
+            println!("Closing session. Session ID: {}", console::style(id).cyan());
+        }
+
         Ok(())
     }
 
@@ -1050,11 +1055,10 @@ impl CliSession {
                                                     }
                                                 })
                                             })
-                                            .unwrap_or_else(|| "unknown".to_string());
+                                            .unwrap_or_else(|| "unknown".to_string().into());
 
                                         let success = tool_response.tool_result.is_ok();
                                         let result_status = if success { "success" } else { "error" };
-
                                         tracing::info!(
                                             counter.goose.tool_completions = 1,
                                             tool_name = %tool_name,
@@ -1328,7 +1332,12 @@ impl CliSession {
             let mut response_message = Message::user();
             let last_tool_name = tool_requests
                 .last()
-                .and_then(|(_, tool_call)| tool_call.as_ref().ok().map(|tool| tool.name.clone()))
+                .and_then(|(_, tool_call)| {
+                    tool_call
+                        .as_ref()
+                        .ok()
+                        .map(|tool| tool.name.to_string().clone())
+                })
                 .unwrap_or_else(|| "tool".to_string());
 
             let notification = if interrupt {

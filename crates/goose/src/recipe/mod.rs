@@ -12,6 +12,7 @@ use utoipa::ToSchema;
 
 pub mod build_recipe;
 pub mod read_recipe_file_content;
+pub mod recipe_library;
 pub mod template_recipe;
 
 pub const BUILT_IN_RECIPE_DIR_PARAM: &str = "recipe_dir";
@@ -711,7 +712,7 @@ sub_recipes:
             } => {
                 assert_eq!(name, "test_python");
                 assert_eq!(code, "print('hello world')");
-                assert_eq!(description.as_deref(), Some("Test python extension"));
+                assert_eq!(description, "Test python extension");
                 assert_eq!(timeout, &Some(300));
                 assert!(dependencies.is_some());
                 let deps = dependencies.as_ref().unwrap();

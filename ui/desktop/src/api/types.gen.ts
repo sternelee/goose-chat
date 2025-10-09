@@ -9,8 +9,6 @@ export type AddSubRecipesResponse = {
     success: boolean;
 };
 
-export type Annotated = RawTextContent | RawImageContent | RawEmbeddedResource;
-
 export type Annotations = {
     audience?: Array<Role>;
     lastModified?: string;
@@ -25,6 +23,13 @@ export type Author = {
 export type AuthorRequest = {
     contact?: string | null;
     metadata?: string | null;
+};
+
+export type ChatRequest = {
+    messages: Array<Message>;
+    recipe_name?: string | null;
+    recipe_version?: string | null;
+    session_id: string;
 };
 
 /**
@@ -65,7 +70,7 @@ export type ConfigResponse = {
     };
 };
 
-export type Content = RawTextContent | RawImageContent | RawEmbeddedResource | Annotated | RawResource;
+export type Content = RawTextContent | RawImageContent | RawEmbeddedResource | RawAudioContent | RawResource;
 
 export type ContextLengthExceeded = {
     msg: string;
@@ -187,11 +192,8 @@ export type ExtendPromptResponse = {
  */
 export type ExtensionConfig = {
     available_tools?: Array<string>;
-    /**
-     * Whether this extension is bundled with Goose
-     */
     bundled?: boolean | null;
-    description?: string | null;
+    description: string;
     env_keys?: Array<string>;
     envs?: Envs;
     /**
@@ -204,12 +206,9 @@ export type ExtensionConfig = {
 } | {
     args: Array<string>;
     available_tools?: Array<string>;
-    /**
-     * Whether this extension is bundled with Goose
-     */
     bundled?: boolean | null;
     cmd: string;
-    description?: string | null;
+    description: string;
     env_keys?: Array<string>;
     envs?: Envs;
     /**
@@ -220,11 +219,8 @@ export type ExtensionConfig = {
     type: 'stdio';
 } | {
     available_tools?: Array<string>;
-    /**
-     * Whether this extension is bundled with Goose
-     */
     bundled?: boolean | null;
-    description?: string | null;
+    description: string;
     display_name?: string | null;
     /**
      * The name used to identify this extension
@@ -234,11 +230,17 @@ export type ExtensionConfig = {
     type: 'builtin';
 } | {
     available_tools?: Array<string>;
-    /**
-     * Whether this extension is bundled with Goose
-     */
     bundled?: boolean | null;
-    description?: string | null;
+    description: string;
+    /**
+     * The name used to identify this extension
+     */
+    name: string;
+    type: 'platform';
+} | {
+    available_tools?: Array<string>;
+    bundled?: boolean | null;
+    description: string;
     env_keys?: Array<string>;
     envs?: Envs;
     headers?: {
@@ -253,10 +255,8 @@ export type ExtensionConfig = {
     uri: string;
 } | {
     available_tools?: Array<string>;
-    /**
-     * Whether this extension is bundled with Goose
-     */
     bundled?: boolean | null;
+    description: string;
     /**
      * Instructions for how to use these tools
      */
@@ -280,10 +280,7 @@ export type ExtensionConfig = {
      * Python package dependencies required by this extension
      */
     dependencies?: Array<string> | null;
-    /**
-     * Description of what the extension does
-     */
-    description?: string | null;
+    description: string;
     /**
      * The name used to identify this extension
      */
@@ -331,6 +328,12 @@ export type GetToolsQuery = {
     session_id: string;
 };
 
+export type Icon = {
+    mimeType?: string;
+    sizes?: string;
+    src: string;
+};
+
 export type ImageContent = {
     _meta?: {
         [key: string]: unknown;
@@ -346,6 +349,10 @@ export type InspectJobResponse = {
     processStartTime?: string | null;
     runningDurationSeconds?: number | null;
     sessionId?: string | null;
+};
+
+export type JsonObject = {
+    [key: string]: unknown;
 };
 
 export type KillJobResponse = {
@@ -440,6 +447,14 @@ export type ModelInfo = {
     supports_cache_control?: boolean | null;
 };
 
+export type ParseRecipeRequest = {
+    content: string;
+};
+
+export type ParseRecipeResponse = {
+    recipe: Recipe;
+};
+
 export type PermissionConfirmationRequest = {
     action: string;
     id: string;
@@ -499,6 +514,11 @@ export type ProvidersResponse = {
     providers: Array<ProviderDetails>;
 };
 
+export type RawAudioContent = {
+    data: string;
+    mimeType: string;
+};
+
 export type RawEmbeddedResource = {
     _meta?: {
         [key: string]: unknown;
@@ -516,9 +536,11 @@ export type RawImageContent = {
 
 export type RawResource = {
     description?: string;
+    icons?: Array<Icon>;
     mimeType?: string;
     name: string;
     size?: number;
+    title?: string;
     uri: string;
 };
 
@@ -531,7 +553,7 @@ export type RawTextContent = {
 
 /**
  * A Recipe represents a personalized, user-generated agent configuration that defines
- * specific behaviors and capabilities within the Goose system.
+ * specific behaviors and capabilities within the goose system.
  *
  * # Fields
  *
@@ -601,7 +623,6 @@ export type Recipe = {
 
 export type RecipeManifestResponse = {
     id: string;
-    isGlobal: boolean;
     lastModified: string;
     name: string;
     recipe: Recipe;
@@ -678,6 +699,12 @@ export type Role = string;
 
 export type RunNowResponse = {
     session_id: string;
+};
+
+export type SaveRecipeRequest = {
+    id?: string | null;
+    is_global?: boolean | null;
+    recipe: Recipe;
 };
 
 export type ScanRecipeRequest = {
@@ -822,6 +849,7 @@ export type Tool = {
         [key: string]: unknown;
     };
     description?: string;
+    icons?: Array<Icon>;
     inputSchema: {
         [key: string]: unknown;
     };
@@ -829,6 +857,7 @@ export type Tool = {
     outputSchema?: {
         [key: string]: unknown;
     };
+    title?: string;
 };
 
 export type ToolAnnotations = {
@@ -840,7 +869,7 @@ export type ToolAnnotations = {
 };
 
 export type ToolConfirmationRequest = {
-    arguments: unknown;
+    arguments: JsonObject;
     id: string;
     prompt?: string | null;
     toolName: string;
@@ -1767,6 +1796,64 @@ export type ListRecipesResponses = {
 
 export type ListRecipesResponse = ListRecipesResponses[keyof ListRecipesResponses];
 
+export type ParseRecipeData = {
+    body: ParseRecipeRequest;
+    path?: never;
+    query?: never;
+    url: '/recipes/parse';
+};
+
+export type ParseRecipeErrors = {
+    /**
+     * Bad request - Invalid recipe format
+     */
+    400: ErrorResponse;
+    /**
+     * Internal server error
+     */
+    500: ErrorResponse;
+};
+
+export type ParseRecipeError = ParseRecipeErrors[keyof ParseRecipeErrors];
+
+export type ParseRecipeResponses = {
+    /**
+     * Recipe parsed successfully
+     */
+    200: ParseRecipeResponse;
+};
+
+export type ParseRecipeResponse2 = ParseRecipeResponses[keyof ParseRecipeResponses];
+
+export type SaveRecipeData = {
+    body: SaveRecipeRequest;
+    path?: never;
+    query?: never;
+    url: '/recipes/save';
+};
+
+export type SaveRecipeErrors = {
+    /**
+     * Unauthorized - Invalid or missing API key
+     */
+    401: unknown;
+    /**
+     * Internal server error
+     */
+    500: ErrorResponse;
+};
+
+export type SaveRecipeError = SaveRecipeErrors[keyof SaveRecipeErrors];
+
+export type SaveRecipeResponses = {
+    /**
+     * Recipe saved to file successfully
+     */
+    204: void;
+};
+
+export type SaveRecipeResponse = SaveRecipeResponses[keyof SaveRecipeResponses];
+
 export type ScanRecipeData = {
     body: ScanRecipeRequest;
     path?: never;
@@ -1782,6 +1869,31 @@ export type ScanRecipeResponses = {
 };
 
 export type ScanRecipeResponse2 = ScanRecipeResponses[keyof ScanRecipeResponses];
+
+export type ReplyData = {
+    body: ChatRequest;
+    path?: never;
+    query?: never;
+    url: '/reply';
+};
+
+export type ReplyErrors = {
+    /**
+     * Agent not initialized
+     */
+    424: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type ReplyResponses = {
+    /**
+     * Streaming response initiated
+     */
+    200: unknown;
+};
 
 export type CreateScheduleData = {
     body: CreateScheduleRequest;

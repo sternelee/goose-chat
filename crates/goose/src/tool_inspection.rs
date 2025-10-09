@@ -267,20 +267,32 @@ pub fn apply_inspection_results_to_permissions(
     permission_result
 }
 
+pub fn get_security_finding_id_from_results(
+    tool_request_id: &str,
+    inspection_results: &[InspectionResult],
+) -> Option<String> {
+    inspection_results
+        .iter()
+        .find(|result| {
+            result.tool_request_id == tool_request_id && result.inspector_name == "security"
+        })
+        .and_then(|result| result.finding_id.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::conversation::message::ToolRequest;
-    use mcp_core::ToolCall;
-    use serde_json::json;
+    use rmcp::model::CallToolRequestParam;
+    use rmcp::object;
 
     #[test]
     fn test_apply_inspection_results() {
         let tool_request = ToolRequest {
             id: "req_1".to_string(),
-            tool_call: Ok(ToolCall {
-                name: "test_tool".to_string(),
-                arguments: json!({}),
+            tool_call: Ok(CallToolRequestParam {
+                name: "test_tool".into(),
+                arguments: Some(object!({})),
             }),
         };
 

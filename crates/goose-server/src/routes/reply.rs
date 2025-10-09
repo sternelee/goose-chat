@@ -10,17 +10,14 @@ use bytes::Bytes;
 use futures::{stream::StreamExt, Stream};
 use goose::conversation::message::{Message, MessageContent};
 use goose::conversation::Conversation;
-use goose::execution::SessionExecutionMode;
 use goose::permission::{Permission, PermissionConfirmation};
 use goose::session::SessionManager;
 use goose::{
     agents::{AgentEvent, SessionConfig},
     permission::permission_confirmation::PrincipalType,
 };
-use mcp_core::ToolResult;
-use rmcp::model::{Content, ServerNotification};
+use rmcp::model::ServerNotification;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serde_json::Value;
 use std::{
     convert::Infallible,
@@ -66,7 +63,7 @@ fn track_tool_telemetry(content: &MessageContent, all_messages: &[Message]) {
                         }
                     })
                 })
-                .unwrap_or_else(|| "unknown".to_string());
+                .unwrap_or_else(|| "unknown".to_string().into());
 
             let success = tool_response.tool_result.is_ok();
             let result_status = if success { "success" } else { "error" };
@@ -82,8 +79,8 @@ fn track_tool_telemetry(content: &MessageContent, all_messages: &[Message]) {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct ChatRequest {
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
+pub struct ChatRequest {
     messages: Vec<Message>,
     session_id: String,
     recipe_name: Option<String>,
@@ -164,7 +161,18 @@ async fn stream_event(
     }
 }
 
-async fn reply_handler(
+#[allow(clippy::too_many_lines)]
+#[utoipa::path(
+    post,
+    path = "/reply",
+    request_body = ChatRequest,
+    responses(
+        (status = 200, description = "Streaming response initiated", content_type = "text/event-stream"),
+        (status = 424, description = "Agent not initialized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn reply(
     State(state): State<Arc<AppState>>,
     Json(request): Json<ChatRequest>,
 ) -> Result<SseResponse, StatusCode> {
@@ -207,10 +215,7 @@ async fn reply_handler(
     let task_tx = tx.clone();
 
     drop(tokio::spawn(async move {
-        let agent = match state
-            .get_agent(session_id.clone(), SessionExecutionMode::Interactive)
-            .await
-        {
+        let agent = match state.get_agent(session_id.clone()).await {
             Ok(agent) => agent,
             Err(e) => {
                 tracing::error!("Failed to get session agent: {}", e);
@@ -450,50 +455,13 @@ pub async fn confirm_permission(
     Ok(Json(Value::Object(serde_json::Map::new())))
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolResultRequest {
-    id: String,
-    result: ToolResult<Vec<Content>>,
-    session_id: String,
-}
-
-async fn submit_tool_result(
-    State(state): State<Arc<AppState>>,
-    raw: Json<Value>,
-) -> Result<Json<Value>, StatusCode> {
-    tracing::info!(
-        "Received tool result request: {}",
-        serde_json::to_string_pretty(&raw.0).unwrap()
-    );
-
-    let payload: ToolResultRequest = match serde_json::from_value(raw.0.clone()) {
-        Ok(req) => req,
-        Err(e) => {
-            tracing::error!("Failed to parse tool result request: {}", e);
-            tracing::error!(
-                "Raw request was: {}",
-                serde_json::to_string_pretty(&raw.0).unwrap()
-            );
-            return Err(StatusCode::UNPROCESSABLE_ENTITY);
-        }
-    };
-
-    let agent = state.get_agent_for_route(payload.session_id).await?;
-    agent.handle_tool_result(payload.id, payload.result).await;
-    Ok(Json(json!({"status": "ok"})))
-}
-
 pub fn routes(state: Arc<AppState>) -> Router {
     Router::new()
         .route(
             "/reply",
-            post(reply_handler).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
+            post(reply).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
         )
         .route("/confirm", post(confirm_permission))
-        .route(
-            "/tool_result",
-            post(submit_tool_result).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
-        )
         .with_state(state)
 }
 

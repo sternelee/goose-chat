@@ -34,6 +34,7 @@ use crate::agents::types::{FrontendTool, ToolResultReceiver};
 use crate::config::{Config, ExtensionConfigManager};
 use crate::context_mgmt::auto_compact;
 use crate::conversation::{debug_conversation_fix, fix_conversation, Conversation};
+use crate::mcp_utils::ToolResult;
 use crate::permission::permission_inspector::PermissionInspector;
 use crate::permission::permission_judge::PermissionCheckResult;
 use crate::permission::PermissionConfirmation;
@@ -45,10 +46,10 @@ use crate::security::security_inspector::SecurityInspector;
 use crate::tool_inspection::ToolInspectionManager;
 use crate::tool_monitor::RepetitionInspector;
 use crate::utils::is_token_cancelled;
-use mcp_core::ToolResult;
 use regex::Regex;
 use rmcp::model::{
-    Content, ErrorCode, ErrorData, GetPromptResult, Prompt, ServerNotification, Tool,
+    CallToolRequestParam, Content, ErrorCode, ErrorData, GetPromptResult, Prompt,
+    ServerNotification, Tool,
 };
 use serde_json::Value;
 use tokio::sync::{mpsc, Mutex};
@@ -60,12 +61,8 @@ use super::model_selector::autopilot::AutoPilot;
 use super::platform_tools;
 use super::tool_execution::{ToolCallResult, CHAT_MODE_TOOL_SKIPPED_RESPONSE, DECLINED_RESPONSE};
 use crate::agents::subagent_task_config::TaskConfig;
-use crate::agents::todo_tools::{
-    todo_read_tool, todo_write_tool, TODO_READ_TOOL_NAME, TODO_WRITE_TOOL_NAME,
-};
 use crate::conversation::message::{Message, ToolRequest};
-use crate::session::extension_data::ExtensionState;
-use crate::session::{extension_data, SessionManager};
+use crate::session::SessionManager;
 
 const DEFAULT_MAX_TURNS: u32 = 1000;
 
@@ -299,7 +296,6 @@ impl Agent {
         permission_check_result: &PermissionCheckResult,
         message_tool_response: Arc<Mutex<Message>>,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
-        session: &Option<SessionConfig>,
     ) -> Result<Vec<(String, ToolStream)>> {
         let mut tool_futures: Vec<(String, ToolStream)> = Vec::new();
 
@@ -307,12 +303,7 @@ impl Agent {
         for request in &permission_check_result.approved {
             if let Ok(tool_call) = request.tool_call.clone() {
                 let (req_id, tool_result) = self
-                    .dispatch_tool_call(
-                        tool_call,
-                        request.id.clone(),
-                        cancel_token.clone(),
-                        session,
-                    )
+                    .dispatch_tool_call(tool_call, request.id.clone(), cancel_token.clone())
                     .await;
 
                 tool_futures.push((
@@ -389,14 +380,17 @@ impl Agent {
     #[instrument(skip(self, tool_call, request_id), fields(input, output))]
     pub async fn dispatch_tool_call(
         &self,
-        tool_call: mcp_core::tool::ToolCall,
+        tool_call: CallToolRequestParam,
         request_id: String,
         cancellation_token: Option<CancellationToken>,
-        session: &Option<SessionConfig>,
     ) -> (String, Result<ToolCallResult, ErrorData>) {
         if tool_call.name == PLATFORM_MANAGE_SCHEDULE_TOOL_NAME {
+            let arguments = tool_call
+                .arguments
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
             let result = self
-                .handle_schedule_management(tool_call.arguments, request_id.clone())
+                .handle_schedule_management(arguments, request_id.clone())
                 .await;
             return (request_id, Ok(ToolCallResult::from(result)));
         }
@@ -404,13 +398,15 @@ impl Agent {
         if tool_call.name == PLATFORM_MANAGE_EXTENSIONS_TOOL_NAME {
             let extension_name = tool_call
                 .arguments
-                .get("extension_name")
+                .as_ref()
+                .and_then(|args| args.get("extension_name"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
             let action = tool_call
                 .arguments
-                .get("action")
+                .as_ref()
+                .and_then(|args| args.get("action"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
@@ -445,19 +441,25 @@ impl Agent {
             .is_sub_recipe_tool(&tool_call.name)
         {
             let sub_recipe_manager = self.sub_recipe_manager.lock().await;
+            let arguments = tool_call
+                .arguments
+                .clone()
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
             sub_recipe_manager
-                .dispatch_sub_recipe_tool_call(
-                    &tool_call.name,
-                    tool_call.arguments.clone(),
-                    &self.tasks_manager,
-                )
+                .dispatch_sub_recipe_tool_call(&tool_call.name, arguments, &self.tasks_manager)
                 .await
         } else if tool_call.name == SUBAGENT_EXECUTE_TASK_TOOL_NAME {
             let provider = self.provider().await.ok();
+            let arguments = tool_call
+                .arguments
+                .clone()
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
 
             let task_config = TaskConfig::new(provider);
             subagent_execute_task_tool::run_tasks(
-                tool_call.arguments.clone(),
+                arguments,
                 task_config,
                 &self.tasks_manager,
                 cancellation_token,
@@ -470,29 +472,33 @@ impl Agent {
                 .list_extensions()
                 .await
                 .unwrap_or_default();
-            create_dynamic_task(
-                tool_call.arguments.clone(),
-                &self.tasks_manager,
-                loaded_extensions,
-            )
-            .await
+            let arguments = tool_call
+                .arguments
+                .clone()
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
+            create_dynamic_task(arguments, &self.tasks_manager, loaded_extensions).await
         } else if tool_call.name == PLATFORM_READ_RESOURCE_TOOL_NAME {
             // Check if the tool is read_resource and handle it separately
+            let arguments = tool_call
+                .arguments
+                .clone()
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
             ToolCallResult::from(
                 self.extension_manager
-                    .read_resource(
-                        tool_call.arguments.clone(),
-                        cancellation_token.unwrap_or_default(),
-                    )
+                    .read_resource(arguments, cancellation_token.unwrap_or_default())
                     .await,
             )
         } else if tool_call.name == PLATFORM_LIST_RESOURCES_TOOL_NAME {
+            let arguments = tool_call
+                .arguments
+                .clone()
+                .map(Value::Object)
+                .unwrap_or(Value::Object(serde_json::Map::new()));
             ToolCallResult::from(
                 self.extension_manager
-                    .list_resources(
-                        tool_call.arguments.clone(),
-                        cancellation_token.unwrap_or_default(),
-                    )
+                    .list_resources(arguments, cancellation_token.unwrap_or_default())
                     .await,
             )
         } else if tool_call.name == PLATFORM_SEARCH_AVAILABLE_EXTENSIONS_TOOL_NAME {
@@ -504,95 +510,10 @@ impl Agent {
                 "Frontend tool execution required".to_string(),
                 None,
             )))
-        } else if tool_call.name == TODO_READ_TOOL_NAME {
-            // Handle task planner read tool
-            let todo_content = if let Some(session_config) = session {
-                SessionManager::get_session(&session_config.id, false)
-                    .await
-                    .ok()
-                    .and_then(|metadata| {
-                        extension_data::TodoState::from_extension_data(&metadata.extension_data)
-                            .map(|state| state.content)
-                    })
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
-
-            ToolCallResult::from(Ok(vec![Content::text(todo_content)]))
-        } else if tool_call.name == TODO_WRITE_TOOL_NAME {
-            // Handle task planner write tool
-            let content = tool_call
-                .arguments
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            // Character limit validation
-            let char_count = content.chars().count();
-            let max_chars = std::env::var("GOOSE_TODO_MAX_CHARS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(50_000);
-
-            if max_chars > 0 && char_count > max_chars {
-                ToolCallResult::from(Err(ErrorData::new(
-                    ErrorCode::INTERNAL_ERROR,
-                    format!(
-                        "Todo list too large: {} chars (max: {})",
-                        char_count, max_chars
-                    ),
-                    None,
-                )))
-            } else if let Some(session_config) = session {
-                match SessionManager::get_session(&session_config.id, false).await {
-                    Ok(mut session) => {
-                        let todo_state = extension_data::TodoState::new(content);
-                        if todo_state
-                            .to_extension_data(&mut session.extension_data)
-                            .is_ok()
-                        {
-                            match SessionManager::update_session(&session_config.id)
-                                .extension_data(session.extension_data)
-                                .apply()
-                                .await
-                            {
-                                Ok(_) => ToolCallResult::from(Ok(vec![Content::text(format!(
-                                    "Updated ({} chars)",
-                                    char_count
-                                ))])),
-                                Err(_) => ToolCallResult::from(Err(ErrorData::new(
-                                    ErrorCode::INTERNAL_ERROR,
-                                    "Failed to update session metadata".to_string(),
-                                    None,
-                                ))),
-                            }
-                        } else {
-                            ToolCallResult::from(Err(ErrorData::new(
-                                ErrorCode::INTERNAL_ERROR,
-                                "Failed to serialize TODO state".to_string(),
-                                None,
-                            )))
-                        }
-                    }
-                    Err(_) => ToolCallResult::from(Err(ErrorData::new(
-                        ErrorCode::INTERNAL_ERROR,
-                        "Failed to read session metadata".to_string(),
-                        None,
-                    ))),
-                }
-            } else {
-                ToolCallResult::from(Err(ErrorData::new(
-                    ErrorCode::INTERNAL_ERROR,
-                    "TODO tools require an active session to persist data".to_string(),
-                    None,
-                )))
-            }
         } else if tool_call.name == ROUTER_LLM_SEARCH_TOOL_NAME {
             match self
                 .tool_route_manager
-                .dispatch_route_search_tool(tool_call.arguments)
+                .dispatch_route_search_tool(tool_call.arguments.unwrap_or_default())
                 .await
             {
                 Ok(tool_result) => tool_result,
@@ -743,11 +664,9 @@ impl Agent {
     pub async fn add_extension(&self, extension: ExtensionConfig) -> ExtensionResult<()> {
         match &extension {
             ExtensionConfig::Frontend {
-                name: _,
                 tools,
                 instructions,
-                bundled: _,
-                available_tools: _,
+                ..
             } => {
                 // For frontend tools, just store them in the frontend_tools map
                 let mut frontend_tools = self.frontend_tools.lock().await;
@@ -815,10 +734,6 @@ impl Agent {
                 platform_tools::manage_extensions_tool(),
                 platform_tools::manage_schedule_tool(),
             ]);
-
-            // Add task planner tools
-            prefixed_tools.extend([todo_read_tool(), todo_write_tool()]);
-
             // Dynamic task tool
             prefixed_tools.push(create_dynamic_task_tool());
 
@@ -1229,7 +1144,6 @@ impl Agent {
                                         &permission_check_result,
                                         message_tool_response.clone(),
                                         cancel_token.clone(),
-                                        &session
                                     ).await?;
 
                                     let tool_futures_arc = Arc::new(Mutex::new(tool_futures));
@@ -1734,21 +1648,6 @@ mod tests {
         let final_output_tool_system_prompt =
             final_output_tool_ref.as_ref().unwrap().system_prompt();
         assert!(system_prompt.contains(&final_output_tool_system_prompt));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_todo_tools_integration() -> Result<()> {
-        let agent = Agent::new();
-
-        // Test that task planner tools are listed
-        let tools = agent.list_tools(None).await;
-
-        let todo_read = tools.iter().find(|tool| tool.name == TODO_READ_TOOL_NAME);
-        let todo_write = tools.iter().find(|tool| tool.name == TODO_WRITE_TOOL_NAME);
-
-        assert!(todo_read.is_some(), "TODO read tool should be present");
-        assert!(todo_write.is_some(), "TODO write tool should be present");
         Ok(())
     }
 
