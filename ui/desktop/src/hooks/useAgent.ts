@@ -95,31 +95,75 @@ export function useAgent(): UseAgentReturn {
         agentWaitingMessage('Agent is initializing');
 
         try {
-          const config = window.electron.getConfig();
+          // Get config from either Tauri or fallback to appConfig
+          let config: any;
+          try {
+            console.log('Trying to get config...');
+            // Try Tauri API first (when running in Tauri)
+            if (window.__TAURI__) {
+              console.log('Tauri API detected, invoking get_config...');
+              const { invoke } = await import('@tauri-apps/api/core');
+              config = await invoke('get_config');
+              console.log('Got config from Tauri:', config);
+            } else {
+              console.log('Tauri API not available, using fallback');
+              throw new Error('Tauri API not available');
+            }
+          } catch (configError) {
+            console.warn('Failed to get config from Tauri, using fallback:', configError);
+            // Fallback to appConfig mock (for development/web)
+            config = window.appConfig ? window.appConfig.getAll() : {
+              GOOSE_DEFAULT_PROVIDER: 'openai',
+              GOOSE_DEFAULT_MODEL: 'gpt-3.5-turbo',
+            };
+            console.log('Using fallback config:', config);
+          }
+
           const provider = (await read('GOOSE_PROVIDER', false)) ?? config.GOOSE_DEFAULT_PROVIDER;
           const model = (await read('GOOSE_MODEL', false)) ?? config.GOOSE_DEFAULT_MODEL;
+
+          console.log('Final provider:', provider, 'Final model:', model);
 
           if (!provider || !model) {
             setAgentState(AgentState.NO_PROVIDER);
             throw new NoProviderOrModelError();
           }
 
-          const agentResponse = initContext.resumeSessionId
-            ? await resumeAgent({
-                body: {
-                  session_id: initContext.resumeSessionId,
-                },
-                throwOnError: true,
-              })
-            : await startAgent({
-                body: {
-                  working_dir: window.appConfig.get('GOOSE_WORKING_DIR') as string,
-                  recipe: recipeFromAppConfig ?? initContext.recipeConfig,
-                },
-                throwOnError: true,
-              });
+          let agentResponse;
+          try {
+            console.log('About to call startAgent or resumeAgent...');
+            console.log('resumeSessionId:', initContext.resumeSessionId);
+            console.log('working_dir:', config.GOOSE_WORKING_DIR || window.appConfig?.get('GOOSE_WORKING_DIR') as string || '.');
+            console.log('recipe:', recipeFromAppConfig ?? initContext.recipeConfig);
+
+            agentResponse = initContext.resumeSessionId
+              ? await resumeAgent({
+                  body: {
+                    session_id: initContext.resumeSessionId,
+                  },
+                  throwOnError: true,
+                })
+              : await startAgent({
+                  body: {
+                    working_dir: config.GOOSE_WORKING_DIR || window.appConfig?.get('GOOSE_WORKING_DIR') as string || '.',
+                    recipe: recipeFromAppConfig ?? initContext.recipeConfig,
+                  },
+                  throwOnError: true,
+                });
+
+            console.log('Agent response received:', agentResponse);
+          } catch (apiError) {
+            console.error('API call to startAgent/resumeAgent failed:', apiError);
+            console.error('API Error type:', typeof apiError);
+            console.error('API Error constructor:', apiError?.constructor?.name);
+            console.error('API Error message:', apiError?.message);
+            console.error('API Error data:', apiError?.data);
+            console.error('API Error status:', apiError?.status);
+            throw apiError;
+          }
 
           const agentSession = agentResponse.data;
+          console.log('Agent session data:', agentSession);
           if (!agentSession) {
             throw Error('Failed to get session info');
           }
@@ -166,6 +210,12 @@ export function useAgent(): UseAgentReturn {
 
           return initChat;
         } catch (error) {
+          console.error('Agent initialization failed with detailed error:', error);
+          console.error('Error type:', typeof error);
+          console.error('Error constructor:', error?.constructor?.name);
+          console.error('Error message:', error?.message);
+          console.error('Error stack:', error?.stack);
+
           if ((error + '').includes('Failed to create provider')) {
             setAgentState(AgentState.NO_PROVIDER);
           } else {

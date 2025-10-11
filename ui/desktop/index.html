@@ -30,7 +30,6 @@
 
         window.fetch = async function (...args) {
           let [request] = args;
-          console.log('url:', request);
           if (request === '/api') return;
           const { url, ...options } = request;
           if (url.startsWith('ipc://')) {

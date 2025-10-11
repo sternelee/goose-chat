@@ -334,6 +334,7 @@ declare global {
       get: (key: string) => unknown;
       getAll: () => Record<string, unknown>;
     };
+    __TAURI__?: any; // Tauri API availability check
   }
 }
 

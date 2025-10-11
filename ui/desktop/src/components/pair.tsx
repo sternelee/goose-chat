@@ -62,7 +62,7 @@ export default function Pair({
           return prev;
         });
       } catch (error) {
-        console.log(error);
+        console.log('Agent init failure', error);
         setFatalError(`Agent init failure: ${error instanceof Error ? error.message : '' + error}`);
       } finally {
         setLoadingChat(false);
