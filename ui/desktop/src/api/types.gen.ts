@@ -120,12 +120,8 @@ export type CreateCustomProviderRequest = {
 };
 
 export type CreateRecipeRequest = {
-    activities?: Array<string> | null;
     author?: AuthorRequest | null;
-    description: string;
-    messages: Array<Message>;
     session_id: string;
-    title: string;
 };
 
 export type CreateRecipeResponse = {
@@ -345,6 +341,10 @@ export type ImageContent = {
     mimeType: string;
 };
 
+export type ImportSessionRequest = {
+    json: string;
+};
+
 export type InspectJobResponse = {
     processStartTime?: string | null;
     runningDurationSeconds?: number | null;
@@ -551,59 +551,6 @@ export type RawTextContent = {
     text: string;
 };
 
-/**
- * A Recipe represents a personalized, user-generated agent configuration that defines
- * specific behaviors and capabilities within the goose system.
- *
- * # Fields
- *
- * ## Required Fields
- * * `version` - Semantic version of the Recipe file format (defaults to "1.0.0")
- * * `title` - Short, descriptive name of the Recipe
- * * `description` - Detailed description explaining the Recipe's purpose and functionality
- * * `Instructions` - Instructions that defines the Recipe's behavior
- *
- * ## Optional Fields
- * * `prompt` - the initial prompt to the session to start with
- * * `extensions` - List of extension configurations required by the Recipe
- * * `context` - Supplementary context information for the Recipe
- * * `activities` - Activity labels that appear when loading the Recipe
- * * `author` - Information about the Recipe's creator and metadata
- * * `parameters` - Additional parameters for the Recipe
- * * `response` - Response configuration including JSON schema validation
- * * `retry` - Retry configuration for automated validation and recovery
- * # Example
- *
- *
- * use goose::recipe::Recipe;
- *
- * // Using the builder pattern
- * let recipe = Recipe::builder()
- * .title("Example Agent")
- * .description("An example Recipe configuration")
- * .instructions("Act as a helpful assistant")
- * .build()
- * .expect("Missing required fields");
- *
- * // Or using struct initialization
- * let recipe = Recipe {
- * version: "1.0.0".to_string(),
- * title: "Example Agent".to_string(),
- * description: "An example Recipe configuration".to_string(),
- * instructions: Some("Act as a helpful assistant".to_string()),
- * prompt: None,
- * extensions: None,
- * context: None,
- * activities: None,
- * author: None,
- * settings: None,
- * parameters: None,
- * response: None,
- * sub_recipes: None,
- * retry: None,
- * };
- *
- */
 export type Recipe = {
     activities?: Array<string> | null;
     author?: Author | null;
@@ -624,7 +571,6 @@ export type Recipe = {
 export type RecipeManifestResponse = {
     id: string;
     lastModified: string;
-    name: string;
     recipe: Recipe;
 };
 
@@ -703,7 +649,6 @@ export type RunNowResponse = {
 
 export type SaveRecipeRequest = {
     id?: string | null;
-    is_global?: boolean | null;
     recipe: Recipe;
 };
 
@@ -743,6 +688,9 @@ export type Session = {
     schedule_id?: string | null;
     total_tokens?: number | null;
     updated_at: string;
+    user_recipe_values?: {
+        [key: string]: string;
+    } | null;
     working_dir: string;
 };
 
@@ -923,6 +871,15 @@ export type UpdateSessionDescriptionRequest = {
      * Updated description (name) for the session (max 200 characters)
      */
     description: string;
+};
+
+export type UpdateSessionUserRecipeValuesRequest = {
+    /**
+     * Recipe parameter values entered by the user
+     */
+    userRecipeValues: {
+        [key: string]: string;
+    };
 };
 
 export type UpsertConfigQuery = {
@@ -2222,6 +2179,37 @@ export type ListSessionsResponses = {
 
 export type ListSessionsResponse = ListSessionsResponses[keyof ListSessionsResponses];
 
+export type ImportSessionData = {
+    body: ImportSessionRequest;
+    path?: never;
+    query?: never;
+    url: '/sessions/import';
+};
+
+export type ImportSessionErrors = {
+    /**
+     * Bad request - Invalid JSON
+     */
+    400: unknown;
+    /**
+     * Unauthorized - Invalid or missing API key
+     */
+    401: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type ImportSessionResponses = {
+    /**
+     * Session imported successfully
+     */
+    200: Session;
+};
+
+export type ImportSessionResponse = ImportSessionResponses[keyof ImportSessionResponses];
+
 export type GetSessionInsightsData = {
     body?: never;
     path?: never;
@@ -2353,6 +2341,76 @@ export type UpdateSessionDescriptionErrors = {
 export type UpdateSessionDescriptionResponses = {
     /**
      * Session description updated successfully
+     */
+    200: unknown;
+};
+
+export type ExportSessionData = {
+    body?: never;
+    path: {
+        /**
+         * Unique identifier for the session
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/sessions/{session_id}/export';
+};
+
+export type ExportSessionErrors = {
+    /**
+     * Unauthorized - Invalid or missing API key
+     */
+    401: unknown;
+    /**
+     * Session not found
+     */
+    404: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type ExportSessionResponses = {
+    /**
+     * Session exported successfully
+     */
+    200: string;
+};
+
+export type ExportSessionResponse = ExportSessionResponses[keyof ExportSessionResponses];
+
+export type UpdateSessionUserRecipeValuesData = {
+    body: UpdateSessionUserRecipeValuesRequest;
+    path: {
+        /**
+         * Unique identifier for the session
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/sessions/{session_id}/user_recipe_values';
+};
+
+export type UpdateSessionUserRecipeValuesErrors = {
+    /**
+     * Unauthorized - Invalid or missing API key
+     */
+    401: unknown;
+    /**
+     * Session not found
+     */
+    404: unknown;
+    /**
+     * Internal server error
+     */
+    500: unknown;
+};
+
+export type UpdateSessionUserRecipeValuesResponses = {
+    /**
+     * Session user recipe values updated successfully
      */
     200: unknown;
 };

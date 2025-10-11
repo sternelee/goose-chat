@@ -25,20 +25,19 @@ use goose::utils::safe_truncate;
 
 use anyhow::{Context, Result};
 use completion::GooseCompleter;
-use etcetera::{choose_app_strategy, AppStrategy};
 use goose::agents::extension::{Envs, ExtensionConfig};
 use goose::agents::types::RetryConfig;
 use goose::agents::{Agent, SessionConfig};
 use goose::config::Config;
 use goose::providers::pricing::initialize_pricing_cache;
-use goose::session;
+use goose::session::SessionManager;
 use input::InputResult;
 use rmcp::model::PromptMessage;
 use rmcp::model::ServerNotification;
 use rmcp::model::{ErrorCode, ErrorData};
 
+use goose::config::paths::Paths;
 use goose::conversation::message::{Message, MessageContent};
-use goose::session::SessionManager;
 use rand::{distributions::Alphanumeric, Rng};
 use rustyline::EditMode;
 use serde_json::Value;
@@ -300,8 +299,9 @@ impl CliSession {
     /// * `builtin_name` - Name of the builtin extension(s), comma separated
     pub async fn add_builtin(&mut self, builtin_name: String) -> Result<()> {
         for name in builtin_name.split(',') {
+            let extension_name = name.trim().to_string();
             let config = ExtensionConfig::Builtin {
-                name: name.trim().to_string(),
+                name: extension_name,
                 display_name: None,
                 // TODO: should set a timeout
                 timeout: Some(goose::config::DEFAULT_EXTENSION_TIMEOUT),
@@ -413,29 +413,20 @@ impl CliSession {
         let completer = GooseCompleter::new(self.completion_cache.clone());
         editor.set_helper(Some(completer));
 
-        // Create and use a global history file in ~/.config/goose directory
-        // This allows command history to persist across different chat sessions
-        // instead of being tied to each individual session's messages
-        let strategy =
-            choose_app_strategy(crate::APP_STRATEGY.clone()).expect("goose requires a home dir");
-        let config_dir = strategy.config_dir();
-        let history_file = config_dir.join("history.txt");
+        let history_file = Paths::config_dir().join("history.txt");
 
-        // Ensure config directory exists
         if let Some(parent) = history_file.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent)?;
             }
         }
 
-        // Load history from the global file
         if history_file.exists() {
             if let Err(err) = editor.load_history(&history_file) {
                 eprintln!("Warning: Failed to load command history: {}", err);
             }
         }
 
-        // Helper function to save history after commands
         let save_history =
             |editor: &mut rustyline::Editor<GooseCompleter, rustyline::history::DefaultHistory>| {
                 if let Err(err) = editor.save_history(&history_file) {
@@ -483,7 +474,7 @@ impl CliSession {
                         RunMode::Plan => {
                             let mut plan_messages = self.messages.clone();
                             plan_messages.push(Message::user().with_text(&content));
-                            let reasoner = get_reasoner()?;
+                            let reasoner = get_reasoner().await?;
                             self.plan_with_reasoner_model(plan_messages, reasoner)
                                 .await?;
                         }
@@ -590,7 +581,7 @@ impl CliSession {
                     let mut plan_messages = self.messages.clone();
                     plan_messages.push(Message::user().with_text(&message_text));
 
-                    let reasoner = get_reasoner()?;
+                    let reasoner = get_reasoner().await?;
                     self.plan_with_reasoner_model(plan_messages, reasoner)
                         .await?;
                 }
@@ -1464,7 +1455,7 @@ impl CliSession {
         );
     }
 
-    pub async fn get_metadata(&self) -> Result<session::Session> {
+    pub async fn get_metadata(&self) -> Result<goose::session::Session> {
         match &self.session_id {
             Some(id) => SessionManager::get_session(id, false).await,
             None => Err(anyhow::anyhow!("No session available")),
@@ -1641,7 +1632,7 @@ impl CliSession {
     }
 }
 
-fn get_reasoner() -> Result<Arc<dyn Provider>, anyhow::Error> {
+async fn get_reasoner() -> Result<Arc<dyn Provider>, anyhow::Error> {
     use goose::model::ModelConfig;
     use goose::providers::create;
 
@@ -1669,7 +1660,7 @@ fn get_reasoner() -> Result<Arc<dyn Provider>, anyhow::Error> {
 
     let model_config =
         ModelConfig::new_with_context_env(model, Some("GOOSE_PLANNER_CONTEXT_LIMIT"))?;
-    let reasoner = create(&provider, model_config)?;
+    let reasoner = create(&provider, model_config).await?;
 
     Ok(reasoner)
 }

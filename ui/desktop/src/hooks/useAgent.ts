@@ -26,7 +26,7 @@ export enum AgentState {
 }
 
 export interface InitializationContext {
-  recipeConfig?: Recipe;
+  recipe?: Recipe;
   resumeSessionId?: string;
   setAgentWaitingMessage: (msg: string | null) => void;
   setIsExtensionsLoading?: (isLoading: boolean) => void;
@@ -52,7 +52,6 @@ export function useAgent(): UseAgentReturn {
   const [recipeFromAppConfig, setRecipeFromAppConfig] = useState<Recipe | null>(
     (window.appConfig.get('recipe') as Recipe) || null
   );
-
   const { getExtensions, addExtension, read } = useConfig();
 
   const resetChat = useCallback(() => {
@@ -81,7 +80,8 @@ export function useAgent(): UseAgentReturn {
           messages: messages?.map((message: ApiMessage) =>
             convertApiMessageToFrontendMessage(message)
           ),
-          recipeConfig: agentSession.recipe,
+          recipe: agentSession.recipe,
+          recipeParameters: agentSession.user_recipe_values || null,
         };
       }
 
@@ -112,10 +112,12 @@ export function useAgent(): UseAgentReturn {
           } catch (configError) {
             console.warn('Failed to get config from Tauri, using fallback:', configError);
             // Fallback to appConfig mock (for development/web)
-            config = window.appConfig ? window.appConfig.getAll() : {
-              GOOSE_DEFAULT_PROVIDER: 'openai',
-              GOOSE_DEFAULT_MODEL: 'gpt-3.5-turbo',
-            };
+            config = window.appConfig
+              ? window.appConfig.getAll()
+              : {
+                  GOOSE_DEFAULT_PROVIDER: 'openai',
+                  GOOSE_DEFAULT_MODEL: 'gpt-3.5-turbo',
+                };
             console.log('Using fallback config:', config);
           }
 
@@ -133,7 +135,12 @@ export function useAgent(): UseAgentReturn {
           try {
             console.log('About to call startAgent or resumeAgent...');
             console.log('resumeSessionId:', initContext.resumeSessionId);
-            console.log('working_dir:', config.GOOSE_WORKING_DIR || window.appConfig?.get('GOOSE_WORKING_DIR') as string || '.');
+            console.log(
+              'working_dir:',
+              config.GOOSE_WORKING_DIR ||
+                (window.appConfig?.get('GOOSE_WORKING_DIR') as string) ||
+                '.'
+            );
             console.log('recipe:', recipeFromAppConfig ?? initContext.recipeConfig);
 
             agentResponse = initContext.resumeSessionId
@@ -145,7 +152,10 @@ export function useAgent(): UseAgentReturn {
                 })
               : await startAgent({
                   body: {
-                    working_dir: config.GOOSE_WORKING_DIR || window.appConfig?.get('GOOSE_WORKING_DIR') as string || '.',
+                    working_dir:
+                      config.GOOSE_WORKING_DIR ||
+                      (window.appConfig?.get('GOOSE_WORKING_DIR') as string) ||
+                      '.',
                     recipe: recipeFromAppConfig ?? initContext.recipeConfig,
                   },
                   throwOnError: true,
@@ -181,10 +191,14 @@ export function useAgent(): UseAgentReturn {
           }
 
           agentWaitingMessage('Extensions are loading');
+
+          const recipeForInit = initContext.recipe || agentSession.recipe || undefined;
           await initializeSystem(agentSession.id, provider as string, model as string, {
             getExtensions,
             addExtension,
             setIsExtensionsLoading: initContext.setIsExtensionsLoading,
+            recipeParameters: agentSession.user_recipe_values,
+            recipe: recipeForInit,
           });
 
           if (COST_TRACKING_ENABLED) {
@@ -195,15 +209,24 @@ export function useAgent(): UseAgentReturn {
             }
           }
 
-          const messages = agentSession.conversation || [];
+          const recipe = initContext.recipe || agentSession.recipe;
+          const conversation = agentSession.conversation || [];
+          // If we're loading a recipe from initContext (new recipe load), start with empty messages
+          // Otherwise, use the messages from the session
+          const messages =
+            initContext.recipe && !initContext.resumeSessionId
+              ? []
+              : conversation.map((message: ApiMessage) =>
+                  convertApiMessageToFrontendMessage(message)
+                );
+
           let initChat: ChatType = {
             sessionId: agentSession.id,
             title: agentSession.recipe?.title || agentSession.description,
             messageHistoryIndex: 0,
-            messages: messages.map((message: ApiMessage) =>
-              convertApiMessageToFrontendMessage(message)
-            ),
-            recipeConfig: agentSession.recipe,
+            messages: messages,
+            recipe: recipe,
+            recipeParameters: agentSession.user_recipe_values || null,
           };
 
           setAgentState(AgentState.INITIALIZED);

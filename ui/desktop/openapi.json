@@ -931,7 +931,6 @@
         "tags": [
           "Recipe Management"
         ],
-        "summary": "Create a Recipe configuration from the current session",
         "operationId": "create_recipe",
         "requestBody": {
           "content": {
@@ -1615,6 +1614,50 @@
         ]
       }
     },
+    "/sessions/import": {
+      "post": {
+        "tags": [
+          "Session Management"
+        ],
+        "operationId": "import_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Session imported successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Invalid JSON"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
     "/sessions/insights": {
       "get": {
         "tags": [
@@ -1760,6 +1803,99 @@
           },
           "400": {
             "description": "Bad request - Description too long (max 200 characters)"
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/sessions/{session_id}/export": {
+      "get": {
+        "tags": [
+          "Session Management"
+        ],
+        "operationId": "export_session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Unique identifier for the session",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session exported successfully",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/sessions/{session_id}/user_recipe_values": {
+      "put": {
+        "tags": [
+          "Session Management"
+        ],
+        "operationId": "update_session_user_recipe_values",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Unique identifier for the session",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSessionUserRecipeValuesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Session user recipe values updated successfully"
           },
           "401": {
             "description": "Unauthorized - Invalid or missing API key"
@@ -2104,19 +2240,9 @@
       "CreateRecipeRequest": {
         "type": "object",
         "required": [
-          "messages",
-          "title",
-          "description",
           "session_id"
         ],
         "properties": {
-          "activities": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          },
           "author": {
             "allOf": [
               {
@@ -2125,19 +2251,7 @@
             ],
             "nullable": true
           },
-          "description": {
-            "type": "string"
-          },
-          "messages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            }
-          },
           "session_id": {
-            "type": "string"
-          },
-          "title": {
             "type": "string"
           }
         }
@@ -2793,6 +2907,17 @@
           }
         }
       },
+      "ImportSessionRequest": {
+        "type": "object",
+        "required": [
+          "json"
+        ],
+        "properties": {
+          "json": {
+            "type": "string"
+          }
+        }
+      },
       "InspectJobResponse": {
         "type": "object",
         "properties": {
@@ -3399,7 +3524,6 @@
       },
       "Recipe": {
         "type": "object",
-        "description": "A Recipe represents a personalized, user-generated agent configuration that defines\nspecific behaviors and capabilities within the goose system.\n\n# Fields\n\n## Required Fields\n* `version` - Semantic version of the Recipe file format (defaults to \"1.0.0\")\n* `title` - Short, descriptive name of the Recipe\n* `description` - Detailed description explaining the Recipe's purpose and functionality\n* `Instructions` - Instructions that defines the Recipe's behavior\n\n## Optional Fields\n* `prompt` - the initial prompt to the session to start with\n* `extensions` - List of extension configurations required by the Recipe\n* `context` - Supplementary context information for the Recipe\n* `activities` - Activity labels that appear when loading the Recipe\n* `author` - Information about the Recipe's creator and metadata\n* `parameters` - Additional parameters for the Recipe\n* `response` - Response configuration including JSON schema validation\n* `retry` - Retry configuration for automated validation and recovery\n# Example\n\n\nuse goose::recipe::Recipe;\n\n// Using the builder pattern\nlet recipe = Recipe::builder()\n.title(\"Example Agent\")\n.description(\"An example Recipe configuration\")\n.instructions(\"Act as a helpful assistant\")\n.build()\n.expect(\"Missing required fields\");\n\n// Or using struct initialization\nlet recipe = Recipe {\nversion: \"1.0.0\".to_string(),\ntitle: \"Example Agent\".to_string(),\ndescription: \"An example Recipe configuration\".to_string(),\ninstructions: Some(\"Act as a helpful assistant\".to_string()),\nprompt: None,\nextensions: None,\ncontext: None,\nactivities: None,\nauthor: None,\nsettings: None,\nparameters: None,\nresponse: None,\nsub_recipes: None,\nretry: None,\n};\n",
         "required": [
           "title",
           "description"
@@ -3494,7 +3618,6 @@
       "RecipeManifestResponse": {
         "type": "object",
         "required": [
-          "name",
           "recipe",
           "lastModified",
           "id"
@@ -3504,9 +3627,6 @@
             "type": "string"
           },
           "lastModified": {
-            "type": "string"
-          },
-          "name": {
             "type": "string"
           },
           "recipe": {
@@ -3718,10 +3838,6 @@
             "type": "string",
             "nullable": true
           },
-          "is_global": {
-            "type": "boolean",
-            "nullable": true
-          },
           "recipe": {
             "$ref": "#/components/schemas/Recipe"
           }
@@ -3874,6 +3990,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "user_recipe_values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "nullable": true
           },
           "working_dir": {
             "type": "string"
@@ -4376,6 +4499,21 @@
           "description": {
             "type": "string",
             "description": "Updated description (name) for the session (max 200 characters)"
+          }
+        }
+      },
+      "UpdateSessionUserRecipeValuesRequest": {
+        "type": "object",
+        "required": [
+          "userRecipeValues"
+        ],
+        "properties": {
+          "userRecipeValues": {
+            "type": "object",
+            "description": "Recipe parameter values entered by the user",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },

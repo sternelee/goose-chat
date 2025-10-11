@@ -5,10 +5,9 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use etcetera::{choose_app_strategy, AppStrategy};
-use goose::config::APP_STRATEGY;
+use goose::config::paths::Paths;
+use goose::config::ExtensionEntry;
 use goose::config::{Config, ConfigError};
-use goose::config::{ExtensionConfigManager, ExtensionEntry};
 use goose::model::ModelConfig;
 use goose::providers::base::ProviderMetadata;
 use goose::providers::pricing::{
@@ -182,19 +181,8 @@ pub async fn read_config(Json(query): Json<ConfigKeyQuery>) -> Result<Json<Value
     )
 )]
 pub async fn get_extensions() -> Result<Json<ExtensionResponse>, StatusCode> {
-    match ExtensionConfigManager::get_all() {
-        Ok(extensions) => Ok(Json(ExtensionResponse { extensions })),
-        Err(err) => {
-            if err
-                .downcast_ref::<goose::config::base::ConfigError>()
-                .is_some_and(|e| matches!(e, goose::config::base::ConfigError::DeserializeError(_)))
-            {
-                Err(StatusCode::UNPROCESSABLE_ENTITY)
-            } else {
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
+    let extensions = goose::config::get_all_extensions();
+    Ok(Json(ExtensionResponse { extensions }))
 }
 
 #[utoipa::path(
@@ -211,24 +199,20 @@ pub async fn get_extensions() -> Result<Json<ExtensionResponse>, StatusCode> {
 pub async fn add_extension(
     Json(extension_query): Json<ExtensionQuery>,
 ) -> Result<Json<String>, StatusCode> {
-    let extensions =
-        ExtensionConfigManager::get_all().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let extensions = goose::config::get_all_extensions();
     let key = goose::config::extensions::name_to_key(&extension_query.name);
 
     let is_update = extensions.iter().any(|e| e.config.key() == key);
 
-    match ExtensionConfigManager::set(ExtensionEntry {
+    goose::config::set_extension(ExtensionEntry {
         enabled: extension_query.enabled,
         config: extension_query.config,
-    }) {
-        Ok(_) => {
-            if is_update {
-                Ok(Json(format!("Updated extension {}", extension_query.name)))
-            } else {
-                Ok(Json(format!("Added extension {}", extension_query.name)))
-            }
-        }
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    });
+
+    if is_update {
+        Ok(Json(format!("Updated extension {}", extension_query.name)))
+    } else {
+        Ok(Json(format!("Added extension {}", extension_query.name)))
     }
 }
 
@@ -245,10 +229,8 @@ pub async fn remove_extension(
     axum::extract::Path(name): axum::extract::Path<String>,
 ) -> Result<Json<String>, StatusCode> {
     let key = goose::config::extensions::name_to_key(&name);
-    match ExtensionConfigManager::remove(&key) {
-        Ok(_) => Ok(Json(format!("Removed extension {}", name))),
-        Err(_) => Err(StatusCode::NOT_FOUND),
-    }
+    goose::config::remove_extension(&key);
+    Ok(Json(format!("Removed extension {}", name)))
 }
 
 #[utoipa::path(
@@ -276,7 +258,7 @@ pub async fn read_all_config() -> Result<Json<ConfigResponse>, StatusCode> {
     )
 )]
 pub async fn providers() -> Result<Json<Vec<ProviderDetails>>, StatusCode> {
-    let mut providers_metadata = get_providers();
+    let mut providers_metadata = get_providers().await;
 
     let custom_providers_dir = goose::config::custom_providers::custom_providers_dir();
 
@@ -365,7 +347,7 @@ pub async fn providers() -> Result<Json<Vec<ProviderDetails>>, StatusCode> {
 pub async fn get_provider_models(
     Path(name): Path<String>,
 ) -> Result<Json<Vec<String>>, StatusCode> {
-    let all = get_providers();
+    let all = get_providers().await;
     let Some(metadata) = all.into_iter().find(|m| m.name == name) else {
         return Err(StatusCode::BAD_REQUEST);
     };
@@ -376,6 +358,7 @@ pub async fn get_provider_models(
     let model_config =
         ModelConfig::new(&metadata.default_model).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let provider = goose::providers::create(&name, model_config)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match provider.fetch_supported_models().await {
@@ -467,7 +450,7 @@ pub async fn get_pricing(
         }
     } else {
         // Get only configured providers' pricing
-        let providers_metadata = get_providers();
+        let providers_metadata = get_providers().await;
 
         for metadata in providers_metadata {
             // Skip unconfigured providers if filtering
@@ -582,11 +565,7 @@ pub async fn upsert_permissions(
     )
 )]
 pub async fn backup_config() -> Result<Json<String>, StatusCode> {
-    let config_dir = choose_app_strategy(APP_STRATEGY.clone())
-        .expect("goose requires a home dir")
-        .config_dir();
-
-    let config_path = config_dir.join("config.yaml");
+    let config_path = Paths::config_dir().join("config.yaml");
 
     if config_path.exists() {
         let file_name = config_path
@@ -647,11 +626,7 @@ pub async fn recover_config() -> Result<Json<String>, StatusCode> {
     )
 )]
 pub async fn validate_config() -> Result<Json<String>, StatusCode> {
-    let config_dir = choose_app_strategy(APP_STRATEGY.clone())
-        .expect("goose requires a home dir")
-        .config_dir();
-
-    let config_path = config_dir.join("config.yaml");
+    let config_path = Paths::config_dir().join("config.yaml");
 
     if !config_path.exists() {
         return Ok(Json("Config file does not exist".to_string()));
@@ -710,7 +685,7 @@ pub async fn create_custom_provider(
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Err(e) = goose::providers::refresh_custom_providers() {
+    if let Err(e) = goose::providers::refresh_custom_providers().await {
         tracing::warn!("Failed to refresh custom providers after creation: {}", e);
     }
 
@@ -732,7 +707,7 @@ pub async fn remove_custom_provider(
     goose::config::custom_providers::CustomProviderConfig::remove(&id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Err(e) = goose::providers::refresh_custom_providers() {
+    if let Err(e) = goose::providers::refresh_custom_providers().await {
         tracing::warn!("Failed to refresh custom providers after deletion: {}", e);
     }
 
