@@ -61,10 +61,10 @@ import { useChatEngine } from '../hooks/useChatEngine';
 import { useRecipeManager } from '../hooks/useRecipeManager';
 import { useFileDrop } from '../hooks/useFileDrop';
 import { useCostTracking } from '../hooks/useCostTracking';
-import { Message } from '../types/message';
 import { ChatState } from '../types/chatState';
 import { ChatType } from '../types/chat';
 import { useToolCount } from './alerts/useToolCount';
+import { Message } from '../api';
 
 // Context for sharing current model info
 const CurrentModelContext = createContext<{ model: string; mode: string } | null>(null);
@@ -158,7 +158,7 @@ function BaseChatContent({
   const {
     recipe,
     recipeId,
-    recipeParameters,
+    recipeParameterValues,
     filteredParameters,
     initialPrompt,
     isParameterModalOpen,
@@ -338,7 +338,7 @@ function BaseChatContent({
                   append={(text: string) => appendWithTracking(text)}
                   activities={Array.isArray(recipe.activities) ? recipe.activities : null}
                   title={recipe.title}
-                  parameterValues={recipeParameters || {}}
+                  parameterValues={recipeParameterValues || {}}
                 />
               </div>
             )}

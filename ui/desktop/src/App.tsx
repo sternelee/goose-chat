@@ -43,6 +43,7 @@ import {
   useAgent,
 } from './hooks/useAgent';
 import { useNavigation } from './hooks/useNavigation';
+import Pair2 from './components/Pair2';
 
 // Route Components
 const HubRouteWrapper = ({
@@ -92,7 +93,16 @@ const PairRouteWrapper = ({
 
   const resumeSessionId = searchParams.get('resumeSessionId') ?? undefined;
 
-  return (
+  return process.env.ALPHA ? (
+    <Pair2
+      chat={chat}
+      setChat={setChat}
+      setView={setView}
+      setIsGoosehintsModalOpen={setIsGoosehintsModalOpen}
+      resumeSessionId={resumeSessionId}
+      initialMessage={initialMessage}
+    />
+  ) : (
     <Pair
       chat={chat}
       setChat={setChat}
@@ -331,7 +341,6 @@ export function AppInner() {
             setAgentWaitingMessage,
             setIsExtensionsLoading,
           });
-          // Update the chat state with the loaded session to ensure sessionId is available globally
           setChat(loadedChat);
         } catch (e) {
           if (e instanceof NoProviderOrModelError) {
