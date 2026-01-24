@@ -11,9 +11,18 @@ declare module 'tauri-axum' {
     body?: string;
   }
 
+  export type LocalResponseBody =
+    | string
+    | boolean
+    | number
+    | null
+    | Record<string, unknown>
+    | unknown[]
+    | number[];
+
   export interface LocalResponse {
     status_code: number;
-    body: number[];
+    body: LocalResponseBody;
     headers: Record<string, string>;
     is_sse?: boolean;
   }

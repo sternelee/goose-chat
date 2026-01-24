@@ -9,7 +9,7 @@ use std::sync::Arc;
 use axum::middleware;
 use axum::Router;
 use serde::{Deserialize, Serialize};
-use tauri::{async_runtime::Mutex, AppHandle, Manager, State};
+use tauri::{async_runtime::Mutex, AppHandle, Emitter, Manager, State};
 use tauri_axum::{LocalRequest, LocalResponse};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::ShellExt;
@@ -17,6 +17,21 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use goose_server::state::AppState;
+
+/// Response for streaming requests
+#[derive(Serialize, Deserialize)]
+pub struct StreamResponse {
+    pub request_id: String,
+    pub status_code: u16,
+}
+
+/// Events for streaming SSE data
+#[derive(Serialize, Deserialize, Clone)]
+pub enum StreamEvent {
+    Headers(std::collections::HashMap<String, String>),
+    Chunk(Vec<u8>),
+    End,
+}
 
 /// Application state shared across Tauri windows and commands
 pub struct GooseAppState {
@@ -111,6 +126,57 @@ async fn local_app_request(
     let response = local_request.send_to_router(&mut router).await;
 
     Ok(response)
+}
+
+/// Tauri command to handle local HTTP requests with SSE streaming support
+/// This command streams the response body in chunks using Tauri events
+#[tauri::command]
+async fn local_app_request_streaming(
+    state: State<'_, GooseAppState>,
+    local_request: LocalRequest,
+    app: AppHandle,
+) -> Result<StreamResponse, String> {
+    let mut router = state.router.lock().await;
+
+    // Check if the request contains a pre-configured SSE channel
+    let sse_channel = local_request
+        .headers
+        .get("X-SSE-Channel")
+        .cloned()
+        .ok_or_else(|| "Missing X-SSE-Channel header".to_string())?;
+
+    // Remove the channel header before processing
+    let mut local_request = local_request;
+    local_request.headers.remove("X-SSE-Channel");
+
+    // Process the request through the router with streaming
+    let (status_code, headers, chunks) =
+        local_request.send_to_router_streaming(&mut router).await?;
+
+    // Send headers as the first event
+    app.emit(
+        &sse_channel,
+        serde_json::json!({ "type": "Headers", "data": headers }),
+    )
+    .map_err(|e| format!("Failed to emit headers: {}", e))?;
+
+    // Send each chunk as a separate event
+    for chunk in chunks {
+        app.emit(
+            &sse_channel,
+            serde_json::json!({ "type": "Chunk", "data": chunk }),
+        )
+        .map_err(|e| format!("Failed to emit chunk: {}", e))?;
+    }
+
+    // Send end event
+    app.emit(&sse_channel, serde_json::json!({ "type": "End" }))
+        .map_err(|e| format!("Failed to emit end: {}", e))?;
+
+    Ok(StreamResponse {
+        request_id: sse_channel,
+        status_code,
+    })
 }
 
 /// Tauri command to get the current secret key
@@ -387,6 +453,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // HTTP bridge
             local_app_request,
+            local_app_request_streaming,
             get_secret_key,
             get_server_status,
             open_url,

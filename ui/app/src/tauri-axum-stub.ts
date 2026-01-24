@@ -8,9 +8,29 @@ export interface LocalRequest {
   body?: string;
 }
 
+/**
+ * Body type for LocalResponse
+ * Can be:
+ * - string: text content or JSON string values
+ * - boolean: JSON boolean (true/false)
+ * - number: JSON number
+ * - null: JSON null
+ * - object: JSON object
+ * - array: JSON array
+ * - number[]: binary data (array of bytes)
+ */
+export type LocalResponseBody =
+  | string
+  | boolean
+  | number
+  | null
+  | Record<string, unknown>
+  | unknown[]
+  | number[];
+
 export interface LocalResponse {
   status_code: number;
-  body: number[];
+  body: LocalResponseBody;
   headers: Record<string, string>;
   is_sse?: boolean;
 }
