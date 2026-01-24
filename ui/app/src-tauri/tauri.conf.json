@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Goose",
+  "version": "1.21.0",
+  "identifier": "com.block.goose",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Goose",
+        "label": "main",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 700,
+        "resizable": true,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "hiddenTitle": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ws: http:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' https:; object-src 'none'; frame-src 'self';"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "copyright": "Copyright (c) Block 2025. All rights reserved.",
+    "category": "Productivity",
+    "shortDescription": "Your local AI agent",
+    "longDescription": "Goose is your on-machine AI agent, capable of automating complex development tasks from start to finish."
+  },
+  "plugins": {
+    "os": {},
+    "shell": {
+      "open": true
+    },
+    "fs": {
+      "scope": ["**"]
+    },
+    "http": {
+      "scope": ["http://localhost:**"]
+    }
+  }
+}

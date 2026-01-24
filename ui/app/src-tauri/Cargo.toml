@@ -1,0 +1,54 @@
+[package]
+name = "goose-app"
+version = "0.1.0"
+description = "Goose AI Agent Desktop App"
+authors = ["Block"]
+edition = "2021"
+
+[lib]
+name = "goose_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-http = "2"
+tauri-plugin-os = "2"
+
+# Async runtime
+tokio = { workspace = true }
+
+# Web framework
+axum = "0.8.4"
+tower-service = "0.3.3"
+tower-http = { workspace = true, features = ["cors"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
+
+# Goose server integration
+tauri-axum = { path = "/Users/sternelee/www/github/tauri-axum" }
+goose-server = { path = "../../../crates/goose-server" }
+goose = { path = "../../../crates/goose" }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Configuration
+config = { version = "0.15", features = ["toml"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
