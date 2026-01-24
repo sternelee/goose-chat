@@ -37,7 +37,6 @@ serde_json = { workspace = true }
 # Goose server integration
 tauri-axum = { path = "/Users/sternelee/www/github/tauri-axum" }
 goose-server = { path = "../../../crates/goose-server" }
-goose = { path = "../../../crates/goose" }
 
 # Error handling
 anyhow = { workspace = true }
