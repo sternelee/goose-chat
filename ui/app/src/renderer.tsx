@@ -74,36 +74,46 @@ const TELEMETRY_CONFIG_KEY = "GOOSE_TELEMETRY_ENABLED";
         let unlisten: (() => void) | null = null;
 
         // First, register the listener before invoking the command
+        console.log("[SSE] Registering listener for channel:", channelName);
         listen(channelName, (event) => {
           try {
             const data = event.payload as any;
+            console.log("[SSE] Received event:", data.type, data);
 
             if (data.type === "Headers") {
+              console.log("[SSE] Headers received:", data.data);
               // Headers received, ready for chunks
             } else if (data.type === "Chunk") {
+              console.log("[SSE] Chunk received, size:", data.data.length);
               // Convert chunk data (array of numbers) to string and accumulate
               const chunkBytes = new Uint8Array(data.data);
               const text = textDecoder.decode(chunkBytes, { stream: true });
+              console.log("[SSE] Decoded chunk text (first 200 chars):", text.substring(0, 200));
               buffer += text;
 
               // Process SSE events by splitting on double newlines
               const lines = buffer.split("\n\n");
               buffer = lines.pop() || ""; // Keep the last incomplete part in the buffer
 
+              console.log("[SSE] Processing", lines.length, "SSE events from chunk");
               for (const line of lines) {
                 if (line.trim()) {
+                  console.log("[SSE] Enqueuing SSE event:", line.substring(0, 100));
                   controller.enqueue(new TextEncoder().encode(line + "\n\n"));
                 }
               }
             } else if (data.type === "End") {
+              console.log("[SSE] End event received");
               // Send any remaining buffer and close
               if (buffer.trim()) {
+                console.log("[SSE] Sending remaining buffer:", buffer.length, "chars");
                 controller.enqueue(new TextEncoder().encode(buffer));
               }
               controller.close();
               ended = true;
               unlisten?.();
             } else if (data.type === "Error") {
+              console.error("[SSE] Error event received:", data.data);
               controller.error(new Error(data.data || "SSE stream error"));
               ended = true;
               unlisten?.();
@@ -119,13 +129,20 @@ const TELEMETRY_CONFIG_KEY = "GOOSE_TELEMETRY_ENABLED";
           // After listener is registered, pass the channel name to the backend
           localRequest.headers["X-SSE-Channel"] = channelName;
 
+          console.log("[SSE] Invoking local_app_request_streaming with channel:", channelName);
+          console.log("[SSE] Local request:", localRequest);
+
           // Now invoke the streaming command
           invoke<{
             request_id: string;
             status_code: number;
           }>("local_app_request_streaming", {
             localRequest,
-          }).catch((error) => {
+          })
+            .then((result) => {
+              console.log("[SSE] Command completed:", result);
+            })
+            .catch((error) => {
             console.error("[SSE] Command error:", error);
             controller.error(error);
             ended = true;

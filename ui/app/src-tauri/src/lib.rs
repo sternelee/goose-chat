@@ -136,6 +136,8 @@ async fn local_app_request_streaming(
     local_request: LocalRequest,
     app: AppHandle,
 ) -> Result<StreamResponse, String> {
+    info!("[local_app_request_streaming] Starting streaming request");
+
     let mut router = state.router.lock().await;
 
     // Check if the request contains a pre-configured SSE channel
@@ -145,13 +147,39 @@ async fn local_app_request_streaming(
         .cloned()
         .ok_or_else(|| "Missing X-SSE-Channel header".to_string())?;
 
+    info!("[local_app_request_streaming] SSE channel: {}", sse_channel);
+    info!(
+        "[local_app_request_streaming] Request method: {}, uri: {}",
+        local_request.method, local_request.uri
+    );
+    info!(
+        "[local_app_request_streaming] Request headers: {:?}",
+        local_request.headers
+    );
+    info!(
+        "[local_app_request_streaming] Request body (first 200 chars): {:?}",
+        local_request.body.as_ref().map(|b| &b[..b.len().min(200)])
+    );
+
     // Remove the channel header before processing
     let mut local_request = local_request;
     local_request.headers.remove("X-SSE-Channel");
 
+    info!("[local_app_request_streaming] Calling send_to_router_streaming");
     // Process the request through the router with streaming
     let (status_code, headers, chunks) =
         local_request.send_to_router_streaming(&mut router).await?;
+
+    info!(
+        "[local_app_request_streaming] Got response: status={}, headers_count={}, chunks_count={}",
+        status_code,
+        headers.len(),
+        chunks.len()
+    );
+    info!(
+        "[local_app_request_streaming] Response headers: {:?}",
+        headers
+    );
 
     // Send headers as the first event
     app.emit(
@@ -160,8 +188,15 @@ async fn local_app_request_streaming(
     )
     .map_err(|e| format!("Failed to emit headers: {}", e))?;
 
+    info!("[local_app_request_streaming] Headers emitted, sending {} chunks", chunks.len());
+
     // Send each chunk as a separate event
-    for chunk in chunks {
+    for (i, chunk) in chunks.iter().enumerate() {
+        info!(
+            "[local_app_request_streaming] Sending chunk {}: {} bytes",
+            i,
+            chunk.len()
+        );
         app.emit(
             &sse_channel,
             serde_json::json!({ "type": "Chunk", "data": chunk }),
@@ -170,8 +205,11 @@ async fn local_app_request_streaming(
     }
 
     // Send end event
+    info!("[local_app_request_streaming] Sending End event");
     app.emit(&sse_channel, serde_json::json!({ "type": "End" }))
         .map_err(|e| format!("Failed to emit end: {}", e))?;
+
+    info!("[local_app_request_streaming] Request complete");
 
     Ok(StreamResponse {
         request_id: sse_channel,
